@@ -4,11 +4,14 @@ import {Card,Column,Image,Content,Level,Divider,Button,Navbar,Media,Title} from 
 import Sidebar from 'react-sidebar';
 
 const Cards=({product,state})=>{
-  const setShowShoppingcart=Object.values(state)[1];
-  const cartItems=Object.values(state)[2];
-  const setCartItems=Object.values(state)[3];
+  const setShowShoppingcart=state.setShowShoppingcart;
+  const cartItems=state.cartItems;
+  const setCartItems=state.setCartItems;
+  const stock=state.stock;
+  const setDataInstock=state.setDataInstock;
+  const sizes=["S","M","L","XL"].filter((key) => {return stock[product.sku][key]>0});
   return(
-      <Card key={product.sku}>
+      <Card key={product.sku} style={{height:"100%", display:"flex", flexDirection:"column"}}>
         <Card.Image>
           <Image.Container >
             <Image src={require('../public/data/products/'+product.sku+'_1.jpg')} />
@@ -26,19 +29,26 @@ const Cards=({product,state})=>{
           </Content>
         </Card.Content>
         <Button.Group>
-          {['S','M','L','XL'].map(size=>
-            <Button onClick={() => {
-              setShowShoppingcart(true);
-              let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
-                if (index !==-1){
-                  cartItems[index].count++;
-                }else{
-                  cartItems.push({product: product,size:size,count:1});
-                }
-              setCartItems(cartItems);
-            }}>
-            {size}
-            </Button>)}
+        {sizes.length >0 ?
+          ["S","M","L","XL"].filter((key) => {return stock[product.sku][key]>0}).map(size=>
+          <Button onClick={() => {
+            setShowShoppingcart(true);
+            let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
+              if (index !==-1){
+                cartItems[index].count++;
+              }else{
+                cartItems.push({product: product,size:size,count:1});
+              }
+            let newstock=stock;
+            newstock[product.sku][size]--;
+            setDataInstock(newstock);
+            setCartItems(cartItems);
+          }}>
+          {size}</Button>) : 
+          <Button>
+            OUT OF STOCK
+          </Button>
+          }
         </Button.Group>
         <Button >
           Add to Cart
@@ -51,6 +61,8 @@ const CartCard = ({ product,size,count,state}) => {
   const setShowShoppingcart=Object.values(state)[1];
   const cartItems=Object.values(state)[2];
   const setCartItems=Object.values(state)[3];
+  const stock=state.stock;
+  const setStock=state.setDataInstock;
   return (
     <Card>
       <Card.Content>
@@ -73,6 +85,15 @@ const CartCard = ({ product,size,count,state}) => {
         </Media>
         <Button onClick={() => {
           let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
+          let newStock=stock;
+          cartItems[index].count++;
+          newStock[product.sku][size]--;
+          setStock(newStock);
+          setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
+          +
+        </Button>
+        <Button onClick={() => {
+          let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
           cartItems[index].count=0;
           setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
           Remove Items
@@ -88,6 +109,7 @@ const App = () => {
   const products = Object.values(data);
   const [showShoppingCart,setShowShoppingcart]=useState(false);
   const [cartItems,setCartItems]=useState([]);
+  const [dataInstock,setDataInstock]=useState({});
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -95,8 +117,15 @@ const App = () => {
       const json = await response.json();
       setData(json);
     };
+    const fetchStock = async () => {
+      const response1 = await fetch('./data/inventory.json');
+      const json1 = await response1.json();
+      setDataInstock(json1);
+    };
+    fetchStock();
     fetchProducts();
   }, []);
+  
 
   return (
     <React.Fragment>
@@ -113,9 +142,9 @@ const App = () => {
         </Navbar.Menu>
       </Navbar>
         <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { background: "black" } }}
-        sidebar={cartItems.map(cartItem =>(
+        sidebar={cartItems.map((cartItem,index)=>(
             <Level>
-                <CartCard product={cartItem.product} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
+                <CartCard product={cartItem.product} key={index} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
             </Level>
         ))}/>
       <Column.Group>
@@ -123,7 +152,7 @@ const App = () => {
           <Column key={i}>
             {products.slice(4*(i-1),4*i).map(product=>
               <Level style={{display:"flex"}}>
-                <Cards product={product} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
+                <Cards product={product} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems,stock:dataInstock,setDataInstock:setDataInstock}}/>
               </Level>
             )}
           </Column>
