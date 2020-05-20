@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import 'rbx/index.css';
 import {Card,Column,Image,Content,Level,Divider,Button,Navbar,Media,Title} from 'rbx';
 import Sidebar from 'react-sidebar';
+import db from './Components/db'
 
 const Cards=({product,state})=>{
   const setShowShoppingcart=state.setShowShoppingcart;
@@ -9,7 +10,11 @@ const Cards=({product,state})=>{
   const setCartItems=state.setCartItems;
   const stock=state.stock;
   const setDataInstock=state.setDataInstock;
-  const sizes=["S","M","L","XL"].filter((key) => {return stock[product.sku][key]>0});
+  const sizes=["S","M","L","XL"].filter((key) => {
+    if (!stock) return true;
+    if (!stock[product.sku]) return true;
+    return stock[product.sku][key]>0
+  });
   return(
       <Card key={product.sku} style={{height:"100%", display:"flex", flexDirection:"column"}}>
         <Card.Image>
@@ -30,7 +35,7 @@ const Cards=({product,state})=>{
         </Card.Content>
         <Button.Group>
         {sizes.length >0 ?
-          ["S","M","L","XL"].filter((key) => {return stock[product.sku][key]>0}).map(size=>
+          sizes.map(size=>
           <Button onClick={() => {
             setShowShoppingcart(true);
             let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
@@ -112,18 +117,22 @@ const App = () => {
   const [dataInstock,setDataInstock]=useState({});
 
   useEffect(() => {
+    const handleData = snap => {
+        if(snap.val()) setDataInstock(snap.val());
+    }
+    db.on('value', handleData, error => alert(error));
+    return () => { db.off('value', handleData); };
+  }, []);
+
+
+  useEffect(() => {
     const fetchProducts = async () => {
-      const response = await fetch('./data/products.json');
-      const json = await response.json();
-      setData(json);
+        const responseI = await fetch('./data/products.json');
+        const jsonI = await responseI.json();
+        setData(jsonI);
     };
-    const fetchStock = async () => {
-      const response1 = await fetch('./data/inventory.json');
-      const json1 = await response1.json();
-      setDataInstock(json1);
-    };
-    fetchStock();
     fetchProducts();
+    // fetchStock();
   }, []);
   
 
