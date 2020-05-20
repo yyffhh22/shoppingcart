@@ -1,8 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import 'rbx/index.css';
-import {Card,Column,Image,Content,Level,Divider,Button,Navbar,Media,Title} from 'rbx';
+import {Card,Column,Image,Content,Level,Divider,Button,Navbar,Media,Title,Message} from 'rbx';
 import Sidebar from 'react-sidebar';
-import db from './Components/db'
+import db from './Components/db';
+import firebase from 'firebase/app';
+import 'firebase/auth';
+import 'firebase/database';
+import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
+
+const uiConfig = {
+  signInFlow: 'popup',
+  signInOptions: [
+    firebase.auth.GoogleAuthProvider.PROVIDER_ID
+  ],
+  callbacks: {
+    signInSuccessWithAuthResult: () => false
+  }
+};
 
 const Cards=({product,state})=>{
   const setShowShoppingcart=state.setShowShoppingcart;
@@ -91,9 +105,13 @@ const CartCard = ({ product,size,count,state}) => {
         <Button onClick={() => {
           let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
           let newStock=stock;
-          cartItems[index].count++;
-          newStock[product.sku][size]--;
-          setStock(newStock);
+          if (newStock[product.sku][size]>0){
+            cartItems[index].count++;
+            newStock[product.sku][size]--;
+            setStock(newStock);
+          }else{
+            alert("no more stock!");
+          }
           setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
           +
         </Button>
@@ -115,6 +133,34 @@ const App = () => {
   const [showShoppingCart,setShowShoppingcart]=useState(false);
   const [cartItems,setCartItems]=useState([]);
   const [dataInstock,setDataInstock]=useState({});
+  const [user, setUser] = useState(null);
+
+  const uiConfig = {
+    signInFlow: 'popup',
+    signInOptions: [
+      firebase.auth.GoogleAuthProvider.PROVIDER_ID
+    ],
+    callbacks: {
+      signInSuccessWithAuthResult: () => false
+    }
+  };
+
+  const Welcome = ({ user }) => (
+    <Message color="info">
+      <Message.Header>
+        Welcome, {user.displayName}
+        <Button primary onClick={() => firebase.auth().signOut()}>
+          Log out
+        </Button>
+      </Message.Header>
+    </Message>
+  );
+  const SignIn = () => (
+    <StyledFirebaseAuth
+      uiConfig={uiConfig}
+      firebaseAuth={firebase.auth()}
+    />
+  );
 
   useEffect(() => {
     const handleData = snap => {
@@ -134,27 +180,42 @@ const App = () => {
     fetchProducts();
     // fetchStock();
   }, []);
-  
 
+  useEffect(() => {
+    firebase.auth().onAuthStateChanged(setUser);
+  }, []);
+  
   return (
     <React.Fragment>
       <Navbar>
         <Navbar.Brand>
-          Nu-Shopping Cart
+          <Navbar.Item>
+            <Title>Shopping Cart</Title>
+          </Navbar.Item>
         </Navbar.Brand>
         <Navbar.Menu>
-          <Navbar.Segment align="end">
-            <Button onClick={()=>{setShowShoppingcart(! showShoppingCart)}} size="large">
-              🛒
-            </Button>
-          </Navbar.Segment>
+        <Navbar.Segment align="end">
+          <Navbar.Item>
+            <Button.Group>
+              { user ? <Welcome user={ user } /> : <SignIn /> }
+              <Button onClick={()=>setShowShoppingcart(!showShoppingCart)} size="large">
+                🛒
+              </Button>
+            </Button.Group>
+          </Navbar.Item>
+        </Navbar.Segment>
         </Navbar.Menu>
       </Navbar>
-        <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { background: "black" } }}
+        <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { width: 300, background: "white" } }}
         sidebar={cartItems.map((cartItem,index)=>(
+            <React.Fragment>
+            <Button onClick={()=>setShowShoppingcart(!showShoppingCart)} size="large">
+              🛒
+            </Button>
             <Level>
                 <CartCard product={cartItem.product} key={index} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
             </Level>
+            </React.Fragment>
         ))}/>
       <Column.Group>
         {[1, 2, 3, 4,].map(i => (
