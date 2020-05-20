@@ -29,7 +29,12 @@ const Cards=({product,state})=>{
           {['S','M','L','XL'].map(size=>
             <Button onClick={() => {
               setShowShoppingcart(true);
-              cartItems.push(product);
+              let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
+                if (index !==-1){
+                  cartItems[index].count++;
+                }else{
+                  cartItems.push({product: product,size:size,count:1});
+                }
               setCartItems(cartItems);
             }}>
             {size}
@@ -42,7 +47,10 @@ const Cards=({product,state})=>{
   )
 }
 
-const CartCard = ({ item }) => {
+const CartCard = ({ product,size,count,state}) => {
+  const setShowShoppingcart=Object.values(state)[1];
+  const cartItems=Object.values(state)[2];
+  const setCartItems=Object.values(state)[3];
   return (
     <Card>
       <Card.Content>
@@ -50,19 +58,25 @@ const CartCard = ({ item }) => {
           <Media.Item as="figure" align="left">
             <Image.Container as="p" size={64}>
               <Image
-                src={require('../public/data/products/'+item.sku+'_2.jpg')}
+                src={require('../public/data/products/'+product.sku+'_2.jpg')}
               />
             </Image.Container>
           </Media.Item>
           <Media.Item>
             <Title as="p" size={4}>
-              {item.title}
+              {product.title}
             </Title>
             <Title as="p" subtitle size={6}>
-              {item.price}
+              {count} x {size} - ${parseFloat(count*product.price).toFixed(2)}
             </Title>
           </Media.Item>
         </Media>
+        <Button onClick={() => {
+          let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
+          cartItems[index].count=0;
+          setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
+          Remove Items
+        </Button>
       </Card.Content>
     </Card>
   );
@@ -101,7 +115,7 @@ const App = () => {
         <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { background: "black" } }}
         sidebar={cartItems.map(cartItem =>(
             <Level>
-                <CartCard item={cartItem}/>
+                <CartCard product={cartItem.product} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
             </Level>
         ))}/>
       <Column.Group>
