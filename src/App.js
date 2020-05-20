@@ -18,8 +18,9 @@ const uiConfig = {
   }
 };
 
-const Cards=({product,state})=>{
+const Cards=({product,state,user})=>{
   const setShowShoppingcart=state.setShowShoppingcart;
+  const showShoppingCart=state.showShoppingCart;
   const cartItems=state.cartItems;
   const setCartItems=state.setCartItems;
   const stock=state.stock;
@@ -38,20 +39,26 @@ const Cards=({product,state})=>{
         </Card.Image>
         <Card.Content>
           <Content>
-            {product.title}
+            <Message>
+              <Message.Header color="light">
+                  {product.title}
+              </Message.Header>
+              <Message.Body color="info">
             <Divider>
               {product.price+'$'}
             </Divider>
               <Divider>
                 {product.description}
               </Divider>
+              </Message.Body>
+            </Message>
           </Content>
         </Card.Content>
-        <Button.Group>
+        <Button.Group align="centered">
         {sizes.length >0 ?
           sizes.map(size=>
           <Button onClick={() => {
-            setShowShoppingcart(true);
+            setShowShoppingcart(!showShoppingCart);
             let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
               if (index !==-1){
                 cartItems[index].count++;
@@ -62,6 +69,10 @@ const Cards=({product,state})=>{
             newstock[product.sku][size]--;
             setDataInstock(newstock);
             setCartItems(cartItems);
+            if (user) {
+              db.child('carts').child(user.uid).set(cartItems)
+                .catch(error => alert(error));
+            }
           }}>
           {size}</Button>) : 
           <Button>
@@ -76,14 +87,14 @@ const Cards=({product,state})=>{
   )
 }
 
-const CartCard = ({ product,size,count,state}) => {
+const CartCard = ({ product,size,count,state,user}) => {
   const setShowShoppingcart=Object.values(state)[1];
   const cartItems=Object.values(state)[2];
   const setCartItems=Object.values(state)[3];
   const stock=state.stock;
   const setStock=state.setDataInstock;
   return (
-    <Card>
+    <Card style={{width:"475px", height:"200px"}}>
       <Card.Content>
         <Media>
           <Media.Item as="figure" align="left">
@@ -107,18 +118,44 @@ const CartCard = ({ product,size,count,state}) => {
           let newStock=stock;
           if (newStock[product.sku][size]>0){
             cartItems[index].count++;
-            newStock[product.sku][size]--;
+            for (var key in stock) {
+              if (String(key) !== String(product.sku)) newStock[key] = stock[key];
+              else {
+                newStock[key] = stock[key];
+                newStock[key][size]-=1;
+              }
+            }
             setStock(newStock);
+            setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));
+            if (user) {
+              db.child('carts').child(user.uid).set(cartItems)
+                .catch(error => alert(error));
+            }
           }else{
             alert("no more stock!");
           }
-          setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
+          }}>
           +
         </Button>
         <Button onClick={() => {
           let index=cartItems.findIndex((item)=>{return item.product === product && item.size === size});
+          var temp = cartItems[index].count;
+          let newStock=stock;
+          for (var key in stock) {
+            if (String(key) !== String(product.sku)) newStock[key] = stock[key];
+            else {
+              newStock[key] = stock[key];
+              newStock[key][size] += temp;
+            }
+          }   
+          setStock(newStock);
           cartItems[index].count=0;
-          setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));}}>
+          setCartItems(cartItems.filter((cartItem) => {return cartItem.count>0}));
+          if (user) {
+            db.child('carts').child(user.uid).set(cartItems)
+              .catch(error => alert(error));
+          }
+        }}>
           Remove Items
         </Button>
       </Card.Content>
@@ -134,6 +171,7 @@ const App = () => {
   const [cartItems,setCartItems]=useState([]);
   const [dataInstock,setDataInstock]=useState({});
   const [user, setUser] = useState(null);
+  var total=0.0;
 
   const uiConfig = {
     signInFlow: 'popup',
@@ -162,6 +200,7 @@ const App = () => {
     />
   );
 
+  cartItems.forEach((item) => {total += item.product.price * item.count})
   useEffect(() => {
     const handleData = snap => {
         if(snap.val()) setDataInstock(snap.val());
@@ -170,6 +209,48 @@ const App = () => {
     return () => { db.off('value', handleData); };
   }, []);
 
+  const mergeCarts = ({user, pulledCart}) => {
+    const newCart = pulledCart;
+    const fixed = pulledCart;
+    const currentCart = cartItems;
+    for(let i = 0; i < currentCart.length; i++){
+      let newItem = true;
+      for(let j = 0; j < fixed.length; j++){
+        if (currentCart[i].itemId === newCart[j].itemId){
+          newItem = false;
+          newCart[j].qty += 1;
+          break;
+        }
+      }
+      if (newItem){
+        newCart.push(currentCart[i])
+      }
+    }
+    setCartItems(newCart)
+    db.child('carts').child(user.uid).set(newCart)
+  }
+
+  const userUpdateFunc = (user) => {
+    if(user){
+      const db2 = firebase.database().ref('carts/' + user.uid);
+      const handleData2 = snap => {
+        if(snap.val()){
+          const pulledCart = snap.val()
+          mergeCarts({user, pulledCart});
+        }
+        else{
+          db.child('carts').child(user.uid).set(cartItems)
+        }
+        db2.off('value', handleData2);
+      }
+      db2.on('value', handleData2, error => alert(error));
+    }
+    setUser(user);
+  }
+
+  useEffect(() => {
+    firebase.auth().onAuthStateChanged(userUpdateFunc);
+  }, []);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -206,23 +287,32 @@ const App = () => {
         </Navbar.Segment>
         </Navbar.Menu>
       </Navbar>
-        <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { width: 300, background: "white" } }}
-        sidebar={cartItems.map((cartItem,index)=>(
-            <React.Fragment>
-            <Button onClick={()=>setShowShoppingcart(!showShoppingCart)} size="large">
-              🛒
-            </Button>
-            <Level>
-                <CartCard product={cartItem.product} key={index} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems}}/>
-            </Level>
-            </React.Fragment>
-        ))}/>
+      <Sidebar open={showShoppingCart} pullRight={true} styles={{ sidebar: { background: "white" ,paddingTop:"50px",psoition:"fixed"} }} sidebar=
+        {<React.Fragment>
+          <Message>
+            <Message.Header>
+              <p> total price</p>
+            </Message.Header>
+            <Message.Body>
+              ${parseFloat(total).toFixed(2)}
+            </Message.Body>
+          </Message>
+        {cartItems.map((cartItem,index) =>(
+          <Level>
+              <CartCard product={cartItem.product} key={index} user={user} size={cartItem.size} count={cartItem.count} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems,stock:dataInstock,setDataInstock:setDataInstock}}/>
+          </Level>
+        ))}
+        <Button disabled align="center">
+          Checkout
+        </Button>
+        </React.Fragment>}
+        />
       <Column.Group>
         {[1, 2, 3, 4,].map(i => (
           <Column key={i}>
             {products.slice(4*(i-1),4*i).map(product=>
               <Level style={{display:"flex"}}>
-                <Cards product={product} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems,stock:dataInstock,setDataInstock:setDataInstock}}/>
+                <Cards product={product} user={user} state={{showShoppingCart,setShowShoppingcart,cartItems,setCartItems,stock:dataInstock,setDataInstock:setDataInstock}}/>
               </Level>
             )}
           </Column>
